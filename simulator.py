@@ -261,7 +261,7 @@ class Simulator:
             order.filled_size = order.size
             order.filled_funds = cost
             
-            # Record trade - THIS WAS MISSING
+            # Record trade - ENSURE THIS EXECUTES
             trade = SimulatedTrade(
                 id=order.id,
                 symbol=order.symbol,
@@ -273,6 +273,7 @@ class Simulator:
                 timestamp=self._get_cst_timestamp()
             )
             self.trades.append(trade)
+            print(f"✅ Trade recorded: Buy {order.size:.6f} @ ${fill_price:.2f}")
             
             print(f"Buy order filled: {order.size:.6f} @ ${fill_price:.2f}")
     
@@ -294,7 +295,7 @@ class Simulator:
         order.filled_size = order.size
         order.filled_funds = gross_proceeds
         
-        # Record trade - THIS WAS MISSING
+        # Record trade - ENSURE THIS EXECUTES
         trade = SimulatedTrade(
             id=order.id,
             symbol=order.symbol,
@@ -306,6 +307,7 @@ class Simulator:
             timestamp=self._get_cst_timestamp()
         )
         self.trades.append(trade)
+        print(f"✅ Trade recorded: Sell {order.size:.6f} @ ${fill_price:.2f}")
         
         print(f"Sell order filled: {order.size:.6f} @ ${fill_price:.2f}")
     

@@ -673,11 +673,6 @@ def render_performance_chart():
             total_trades = len(trades)
             st.metric("Total Trades", total_trades)
 
-# Update the main tabs section:
-        with tab2:
-            # Performance now works for both simulation and live
-            render_performance_chart()
-
 def render_market_info():
    """Render market information and spread data"""
    if not st.session_state.bot:
@@ -805,10 +800,8 @@ def main():
                render_order_status()
        
        with tab2:
-           if st.session_state.bot.simulation:
-               render_performance_chart()
-           else:
-               st.info("Performance tracking available in simulation mode")
+           # Performance now works for both simulation and live
+           render_performance_chart()
        
        with tab3:
            render_trade_history()
@@ -831,46 +824,46 @@ def main():
            st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
 
 def cli_mode():
-   """CLI mode for headless operation"""
-   if len(sys.argv) > 1 and sys.argv[1] == "--cli":
-       print("🚀 Starting Smart Crypto Bot in CLI mode...")
-       
-       try:
-           bot = TradingBot(simulation=True)
-           
-           if "--start" in sys.argv:
-               if bot.start():
-                   print("✅ Bot started successfully")
-                   
-                   while True:
-                       status = bot.get_status()
-                       positions = status['positions']
-                       pnl = status['pnl']
-                       settings = status['settings']
-                       
-                       print(f"\n📊 Status: {status['status']}")
-                       print(f"💰 Price: ${status['current_price']:,.2f}")
-                       print(f"📈 Positions: {positions['count']} ({positions['profitable_count']} profitable)")
-                       print(f"💵 P&L: ${pnl['unrealized_usd']:+.2f} ({pnl['unrealized_percent']:+.2f}%)")
-                       print(f"🎯 Margin: {settings['profit_margin']:.2f}% (min: {settings['minimum_margin']:.1f}%)")
-                       print(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
-                       
-                       time.sleep(30)
-               else:
-                   print("❌ Failed to start bot")
-           else:
-               print("Use --start to begin trading")
-               print("Example: python main.py --cli --start")
-               
-       except KeyboardInterrupt:
-           print("\n🛑 Shutting down...")
-           if 'bot' in locals():
-               bot.force_stop()
-       except Exception as e:
-           print(f"❌ Error: {e}")
-       
-       sys.exit(0)
+  """CLI mode for headless operation"""
+  if len(sys.argv) > 1 and sys.argv[1] == "--cli":
+      print("🚀 Starting Smart Crypto Bot in CLI mode...")
+      
+      try:
+          bot = TradingBot(simulation=True)
+          
+          if "--start" in sys.argv:
+              if bot.start():
+                  print("✅ Bot started successfully")
+                  
+                  while True:
+                      status = bot.get_status()
+                      positions = status['positions']
+                      pnl = status['pnl']
+                      settings = status['settings']
+                      
+                      print(f"\n📊 Status: {status['status']}")
+                      print(f"💰 Price: ${status['current_price']:,.2f}")
+                      print(f"📈 Positions: {positions['count']} ({positions['profitable_count']} profitable)")
+                      print(f"💵 P&L: ${pnl['unrealized_usd']:+.2f} ({pnl['unrealized_percent']:+.2f}%)")
+                      print(f"🎯 Margin: {settings['profit_margin']:.2f}% (min: {settings['minimum_margin']:.1f}%)")
+                      print(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
+                      
+                      time.sleep(30)
+              else:
+                  print("❌ Failed to start bot")
+          else:
+              print("Use --start to begin trading")
+              print("Example: python main.py --cli --start")
+              
+      except KeyboardInterrupt:
+          print("\n🛑 Shutting down...")
+          if 'bot' in locals():
+              bot.force_stop()
+      except Exception as e:
+          print(f"❌ Error: {e}")
+      
+      sys.exit(0)
 
 if __name__ == "__main__":
-   cli_mode()  # Check for CLI mode first
-   main()      # Otherwise run Streamlit app
+  cli_mode()  # Check for CLI mode first
+  main()      # Otherwise run Streamlit app

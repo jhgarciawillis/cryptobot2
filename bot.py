@@ -163,6 +163,7 @@ class TradingBot:
                 self.positions.append(position)
                 
                 print(f"✅ Buy filled: {position.size:.6f} BTC @ ${position.buy_price:.2f}")
+                print(f"✅ Position created: {len(self.positions)} total positions")
                 
                 # Immediately place sell order for this position
                 self._execute_smart_sell(position, order_info['actual_price'])
@@ -185,6 +186,7 @@ class TradingBot:
                     print(f"   Profit: ${profit_usd:.2f} ({profit_pct:+.2f}%)")
                     
                     self.positions.remove(position_to_remove)
+                    print(f"✅ Position removed: {len(self.positions)} remaining positions")
     
     def _check_exit_opportunities(self, current_price: float):
         """Check for exit opportunities when stopping"""
@@ -397,6 +399,7 @@ class TradingBot:
     
     def get_positions_detail(self) -> List[Dict]:
         """Get detailed position information"""
+        print(f"DEBUG: Bot has {len(self.positions)} positions")  # Debug print
         current_price = self.last_price or self.client.get_current_price(self.symbol)
         position_details = []
         
@@ -419,12 +422,15 @@ class TradingBot:
                 "sell_order_id": pos.sell_order_id
             })
         
+        print(f"DEBUG: Returning {len(position_details)} position details")  # Debug print
         return position_details
     
     def get_trade_history(self) -> List[Dict]:
         """Get trade history"""
         if hasattr(self.client, 'get_trade_history'):
-            return self.client.get_trade_history()
+            trades = self.client.get_trade_history()
+            print(f"DEBUG: Retrieved {len(trades)} trades from client")  # Debug print
+            return trades
         return []
     
     def get_open_orders(self) -> List[Dict]:
