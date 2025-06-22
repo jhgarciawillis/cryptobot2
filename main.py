@@ -166,23 +166,30 @@ def render_sidebar():
     st.sidebar.divider()
     st.sidebar.subheader("⚙️ Settings")
     
-    # Profit margin
+    # Profit margin with enforced minimum
     current_margin = status["settings"]["profit_margin"]
+    minimum_margin = status["settings"]["minimum_margin"]
+    
     new_margin = st.sidebar.number_input(
         "Profit Margin (%)",
-        min_value=0.1,
+        min_value=minimum_margin,  # Enforce 0.5% minimum
         max_value=5.0,
         value=current_margin,
-        step=0.1,
-        format="%.1f",
-        help="Target profit percentage per trade"
+        step=0.01,
+        format="%.2f",
+        help=f"Minimum {minimum_margin:.1f}% guarantees profit after all fees"
     )
     
-    if abs(new_margin - current_margin) > 0.05:
+    if abs(new_margin - current_margin) > 0.005:  # Only update if changed by more than 0.005%
         if st.sidebar.button("💰 Update Margin"):
             if bot.set_profit_margin(new_margin):
-                st.success(f"Margin set to {new_margin:.1f}%")
+                st.success(f"Margin set to {new_margin:.2f}%")
                 st.rerun()
+            else:
+                st.error(f"Failed to set margin - minimum is {minimum_margin:.1f}%")
+    
+    # Show minimum margin info
+    st.sidebar.info(f"ℹ️ Minimum: {minimum_margin:.1f}% (guaranteed profit)")
     
     # Quick stats
     st.sidebar.divider()
@@ -229,87 +236,89 @@ def render_sidebar():
                 st.rerun()
 
 def render_dashboard():
-    """Render main dashboard"""
-    if not st.session_state.bot:
-        st.error("Bot not initialized")
-        return
-    
-    bot = st.session_state.bot
-    status = bot.get_status()
-    
-    # Header
-    st.title("🤖 Crypto Profit Bot")
-    
-    mode_color = "🟢" if bot.simulation else "🔴"
-    mode_text = "SIMULATION" if bot.simulation else "LIVE TRADING"
-    st.markdown(f"**Mode:** {mode_color} {mode_text}")
-    
-    # Strategy info
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.info(f"📊 **Strategy:** Smart Limit Orders")
-    with col2:
-        st.info(f"🎯 **Target Profit:** {status['settings']['profit_margin']:.1f}%")
-    with col3:
-        st.info(f"📉 **Buy Trigger:** {status['settings']['buy_trigger_percent']:.1f}% drop")
-    
-    # Main metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Current Price", f"${status['current_price']:,.2f}" if status['current_price'] else "N/A")
-    
-    with col2:
-        st.metric("USDT Balance", f"${status['balances']['USDT']:.2f}")
-    
-    with col3:
-        st.metric("BTC Holdings", f"{status['balances']['BTC']:.6f}")
-    
-    with col4:
-        positions = status['positions']
-        profitable_text = f" ({positions['profitable_count']} profitable)" if positions['count'] > 0 else ""
-        st.metric("Open Positions", f"{positions['count']}{profitable_text}")
-    
-    # P&L Section
-    if status['pnl']['unrealized_usd'] != 0 or (bot.simulation and status['portfolio']['total_return'] != 0):
-        st.divider()
-        
-        if bot.simulation:
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.metric(
-                    "Portfolio Value",
-                    f"${status['portfolio']['total_value']:.2f}",
-                    help="Total value of USDT + BTC holdings"
-                )
-            
-            with col2:
-                st.metric(
-                    "Total Return",
-                    f"${status['portfolio']['total_return']:+.2f}",
-                    delta=f"{(status['portfolio']['total_return']/status['portfolio']['initial_value'])*100:+.2f}%"
-                )
-            
-            with col3:
-                st.metric(
-                    "Unrealized P&L",
-                    f"${status['pnl']['unrealized_usd']:+.2f}",
-                    delta=f"{status['pnl']['unrealized_percent']:+.2f}%"
-                )
-        else:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.metric(
-                    "Unrealized P&L",
-                    f"${status['pnl']['unrealized_usd']:+.2f}",
-                    delta=f"{status['pnl']['unrealized_percent']:+.2f}%"
-                )
-            
-            with col2:
-                if status['positions']['count'] > 0:
-                    st.metric("Avg Buy Price", f"${status['positions']['avg_buy_price']:,.2f}")
+   """Render main dashboard"""
+   if not st.session_state.bot:
+       st.error("Bot not initialized")
+       return
+   
+   bot = st.session_state.bot
+   status = bot.get_status()
+   
+   # Header
+   st.title("🤖 Crypto Profit Bot")
+   
+   mode_color = "🟢" if bot.simulation else "🔴"
+   mode_text = "SIMULATION" if bot.simulation else "LIVE TRADING"
+   st.markdown(f"**Mode:** {mode_color} {mode_text}")
+   
+   # Strategy info with minimum margin displayed
+   col1, col2, col3 = st.columns(3)
+   with col1:
+       st.info(f"📊 **Strategy:** Smart Limit Orders")
+   with col2:
+       margin = status['settings']['profit_margin']
+       min_margin = status['settings']['minimum_margin']
+       st.info(f"🎯 **Target Profit:** {margin:.2f}% (min: {min_margin:.1f}%)")
+   with col3:
+       st.info(f"📉 **Buy Trigger:** {status['settings']['buy_trigger_percent']:.1f}% drop")
+   
+   # Main metrics
+   col1, col2, col3, col4 = st.columns(4)
+   
+   with col1:
+       st.metric("Current Price", f"${status['current_price']:,.2f}" if status['current_price'] else "N/A")
+   
+   with col2:
+       st.metric("USDT Balance", f"${status['balances']['USDT']:.2f}")
+   
+   with col3:
+       st.metric("BTC Holdings", f"{status['balances']['BTC']:.6f}")
+   
+   with col4:
+       positions = status['positions']
+       profitable_text = f" ({positions['profitable_count']} profitable)" if positions['count'] > 0 else ""
+       st.metric("Open Positions", f"{positions['count']}{profitable_text}")
+   
+   # P&L Section
+   if status['pnl']['unrealized_usd'] != 0 or (bot.simulation and status['portfolio']['total_return'] != 0):
+       st.divider()
+       
+       if bot.simulation:
+           col1, col2, col3 = st.columns(3)
+           
+           with col1:
+               st.metric(
+                   "Portfolio Value",
+                   f"${status['portfolio']['total_value']:.2f}",
+                   help="Total value of USDT + BTC holdings"
+               )
+           
+           with col2:
+               st.metric(
+                   "Total Return",
+                   f"${status['portfolio']['total_return']:+.2f}",
+                   delta=f"{(status['portfolio']['total_return']/status['portfolio']['initial_value'])*100:+.2f}%"
+               )
+           
+           with col3:
+               st.metric(
+                   "Unrealized P&L",
+                   f"${status['pnl']['unrealized_usd']:+.2f}",
+                   delta=f"{status['pnl']['unrealized_percent']:+.2f}%"
+               )
+       else:
+           col1, col2 = st.columns(2)
+           
+           with col1:
+               st.metric(
+                   "Unrealized P&L",
+                   f"${status['pnl']['unrealized_usd']:+.2f}",
+                   delta=f"{status['pnl']['unrealized_percent']:+.2f}%"
+               )
+           
+           with col2:
+               if status['positions']['count'] > 0:
+                   st.metric("Avg Buy Price", f"${status['positions']['avg_buy_price']:,.2f}")
 
 def render_price_chart():
    """Render price chart with position markers"""
@@ -667,12 +676,16 @@ def render_market_info():
            with col4:
                st.metric("Spread %", f"{spread_info['spread_percent']:.3f}%")
            
-           # Strategy explanation
-           st.info("""
-           💡 **Smart Order Strategy:**
+           # Strategy explanation with minimum margin info
+           margin_info = st.session_state.bot.get_status()['settings']
+           min_margin = margin_info['minimum_margin']
+           
+           st.info(f"""
+           💡 **Smart Order Strategy with {min_margin:.1f}% Minimum Profit:**
            - **Buy orders** placed just above highest bid (maker fee: 0.1%)
            - **Sell orders** placed just below lowest ask (maker fee: 0.1%)
            - **No slippage** - exact price execution guaranteed
+           - **Minimum {min_margin:.1f}% profit** ensures profitability after all fees
            - **Better fees** compared to market orders (taker fee: 0.1%)
            """)
        else:
@@ -806,11 +819,13 @@ def cli_mode():
                        status = bot.get_status()
                        positions = status['positions']
                        pnl = status['pnl']
+                       settings = status['settings']
                        
                        print(f"\n📊 Status: {status['status']}")
                        print(f"💰 Price: ${status['current_price']:,.2f}")
                        print(f"📈 Positions: {positions['count']} ({positions['profitable_count']} profitable)")
                        print(f"💵 P&L: ${pnl['unrealized_usd']:+.2f} ({pnl['unrealized_percent']:+.2f}%)")
+                       print(f"🎯 Margin: {settings['profit_margin']:.2f}% (min: {settings['minimum_margin']:.1f}%)")
                        print(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
                        
                        time.sleep(30)

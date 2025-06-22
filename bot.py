@@ -39,10 +39,11 @@ class TradingBot:
     def __init__(self, api_key: str = None, api_secret: str = None, api_passphrase: str = None, 
                  sandbox: bool = True, simulation: bool = True, initial_balance: float = 50):
         
-        # Configuration
+        # Configuration with enforced minimums
         self.simulation = simulation
         self.symbol = "BTC-USDT"
-        self.profit_margin = 0.005  # 0.5% target profit
+        self.MINIMUM_PROFIT_MARGIN = 0.005  # 0.5% absolute minimum
+        self.profit_margin = 0.005  # 0.5% default target profit
         self.buy_trigger_percent = 0.5  # 0.5% price drop triggers buy
         self.min_trade_amount = 10  # Minimum $10 per trade
         self.max_position_count = 10  # Maximum number of positions
@@ -66,7 +67,7 @@ class TradingBot:
         self.order_check_interval = 5  # Check orders every 5 seconds
         
         print(f"Bot initialized - Mode: {'Simulation' if simulation else 'Live'}")
-        print(f"Target profit margin: {self.profit_margin*100:.3f}%")
+        print(f"Target profit margin: {self.profit_margin*100:.1f}% (minimum: {self.MINIMUM_PROFIT_MARGIN*100:.1f}%)")
     
     def _get_last_buy_price(self) -> Optional[float]:
         """Get the price of the most recent purchase"""
@@ -310,14 +311,19 @@ class TradingBot:
         print("⏹️ Bot force stopped")
     
     def set_profit_margin(self, margin_percent: float) -> bool:
-        """Set profit margin (percentage)"""
-        if 0.1 <= margin_percent <= 5.0:
-            old_margin = self.profit_margin * 100
-            self.profit_margin = margin_percent / 100
-            print(f"📊 Profit margin changed: {old_margin:.3f}% → {margin_percent:.3f}%")
-            return True
-        print(f"❌ Invalid margin: {margin_percent:.3f}% (must be 0.1% - 5.0%)")
-        return False
+        """Set profit margin with enforced minimum"""
+        if margin_percent < self.MINIMUM_PROFIT_MARGIN * 100:
+            print(f"❌ REJECTED: Minimum profit margin is {self.MINIMUM_PROFIT_MARGIN * 100:.1f}% for guaranteed profits")
+            return False
+        
+        if margin_percent > 5.0:
+            print(f"❌ REJECTED: Maximum profit margin is 5.0%")
+            return False
+        
+        old_margin = self.profit_margin * 100
+        self.profit_margin = margin_percent / 100
+        print(f"📊 Profit margin updated: {old_margin:.1f}% → {margin_percent:.1f}%")
+        return True
     
     def get_status(self) -> Dict[str, Any]:
         """Get comprehensive bot status"""
@@ -382,6 +388,7 @@ class TradingBot:
             },
             "settings": {
                 "profit_margin": self.profit_margin * 100,
+                "minimum_margin": self.MINIMUM_PROFIT_MARGIN * 100,
                 "buy_trigger_percent": self.buy_trigger_percent,
                 "min_trade_amount": self.min_trade_amount
             },
