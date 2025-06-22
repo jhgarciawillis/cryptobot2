@@ -1,0 +1,25 @@
+{
+    "mode": "simulation",
+    "trading": {
+      "symbol": "BTC-USDT",
+      "profit_threshold": 1.01,
+      "buy_trigger_percent": 0.5,
+      "max_position_size": 1.0,
+      "min_trade_amount": 10
+    },
+    "kucoin": {
+      "sandbox": true,
+      "api_url": "https://api.kucoin.com",
+      "sandbox_url": "https://openapi-sandbox.kucoin.com"
+    },
+    "ui": {
+      "refresh_interval": 5,
+      "chart_timeframe": "1h",
+      "show_debug": true
+    },
+    "risk": {
+      "max_drawdown_percent": 20,
+      "emergency_stop": false,
+      "max_open_positions": 5
+    }
+  }
