@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import time
 import sys
+import pytz
 from datetime import datetime, timedelta
 from bot import TradingBot
 
@@ -320,105 +321,6 @@ def render_dashboard():
                if status['positions']['count'] > 0:
                    st.metric("Avg Buy Price", f"${status['positions']['avg_buy_price']:,.2f}")
 
-def render_price_chart():
-   """Render price chart with position markers"""
-   if not st.session_state.bot:
-       return
-   
-   st.subheader("📈 Smart Order Execution")
-   
-   bot = st.session_state.bot
-   current_price = bot.last_price or bot.client.get_current_price()
-   
-   if not current_price:
-       st.warning("No price data available")
-       return
-   
-   # Generate sample price data (in real implementation, use historical data)
-   import numpy as np
-   
-   times = pd.date_range(end=datetime.now(), periods=100, freq='5min')
-   np.random.seed(42)
-   price_changes = np.cumsum(np.random.normal(0, 0.001, 100))
-   prices = [current_price * (1 + change) for change in price_changes]
-   
-   fig = go.Figure()
-   
-   # Price line
-   fig.add_trace(go.Scatter(
-       x=times,
-       y=prices,
-       mode='lines',
-       name='BTC Price',
-       line=dict(color='orange', width=2)
-   ))
-   
-   # Position markers
-   positions = bot.get_positions_detail()
-   if positions:
-       buy_prices = [pos['buy_price'] for pos in positions]
-       buy_times = [datetime.fromtimestamp(pos['buy_timestamp']) for pos in positions]
-       
-       fig.add_trace(go.Scatter(
-           x=buy_times,
-           y=buy_prices,
-           mode='markers',
-           name='Smart Buy Orders',
-           marker=dict(color='green', size=10, symbol='triangle-up'),
-           hovertemplate='<b>SMART BUY</b><br>Price: %{y:$,.2f}<br>Time: %{x}<extra></extra>'
-       ))
-       
-       # Sell target lines for each position
-       for pos in positions:
-           target_price = pos['target_price']
-           color = "green" if pos['is_profitable'] else "orange"
-           fig.add_hline(
-               y=target_price,
-               line_dash="dot",
-               line_color=color,
-               opacity=0.5,
-               annotation_text=f"Target: ${target_price:,.2f}"
-           )
-   
-   # Current price line
-   fig.add_hline(
-       y=current_price,
-       line_color="orange",
-       line_width=3,
-       annotation_text=f"Current: ${current_price:,.2f}"
-   )
-   
-   # Market depth indicator
-   try:
-       spread_info = bot.client.get_bid_ask_spread()
-       if spread_info:
-           fig.add_hline(
-               y=spread_info['bid'],
-               line_dash="dash",
-               line_color="blue",
-               opacity=0.3,
-               annotation_text=f"Bid: ${spread_info['bid']:,.2f}"
-           )
-           fig.add_hline(
-               y=spread_info['ask'],
-               line_dash="dash",
-               line_color="red",
-               opacity=0.3,
-               annotation_text=f"Ask: ${spread_info['ask']:,.2f}"
-           )
-   except:
-       pass
-   
-   fig.update_layout(
-       title="BTC Price with Smart Order Positions",
-       xaxis_title="Time",
-       yaxis_title="Price (USD)",
-       height=400,
-       showlegend=True
-   )
-   
-   st.plotly_chart(fig, use_container_width=True)
-
 def render_positions_table():
    """Render detailed positions table"""
    if not st.session_state.bot:
@@ -498,158 +400,283 @@ def render_order_status():
    except Exception as e:
        st.error(f"Error fetching orders: {e}")
 
+def render_price_chart():
+    """Render price chart with position markers"""
+    if not st.session_state.bot:
+        return
+    
+    st.subheader("📈 Smart Order Execution")
+    
+    bot = st.session_state.bot
+    current_price = bot.last_price or bot.client.get_current_price()
+    
+    if not current_price:
+        st.warning("No price data available")
+        return
+    
+    # Generate sample price data with CST timezone
+    import numpy as np
+    
+    # Use CST timezone
+    cst = pytz.timezone('America/Chicago')
+    times = pd.date_range(end=datetime.now(cst), periods=100, freq='5min', tz=cst)
+    
+    np.random.seed(42)
+    price_changes = np.cumsum(np.random.normal(0, 0.001, 100))
+    prices = [current_price * (1 + change) for change in price_changes]
+    
+    fig = go.Figure()
+    
+    # Price line
+    fig.add_trace(go.Scatter(
+        x=times,
+        y=prices,
+        mode='lines',
+        name='BTC Price',
+        line=dict(color='orange', width=2)
+    ))
+    
+    # Position markers
+    positions = bot.get_positions_detail()
+    if positions:
+        # Convert timestamps to CST
+        buy_times = [datetime.fromtimestamp(pos['buy_timestamp'], tz=cst) for pos in positions]
+        buy_prices = [pos['buy_price'] for pos in positions]
+        
+        fig.add_trace(go.Scatter(
+            x=buy_times,
+            y=buy_prices,
+            mode='markers',
+            name='Smart Buy Orders',
+            marker=dict(color='green', size=10, symbol='triangle-up'),
+            hovertemplate='<b>SMART BUY</b><br>Price: %{y:$,.2f}<br>Time: %{x}<extra></extra>'
+        ))
+        
+        # Sell target lines for each position
+        for pos in positions:
+            target_price = pos['target_price']
+            color = "green" if pos['is_profitable'] else "orange"
+            fig.add_hline(
+                y=target_price,
+                line_dash="dot",
+                line_color=color,
+                opacity=0.5,
+                annotation_text=f"Target: ${target_price:,.2f}"
+            )
+    
+    # Current price line
+    fig.add_hline(
+        y=current_price,
+        line_color="orange",
+        line_width=3,
+        annotation_text=f"Current: ${current_price:,.2f}"
+    )
+    
+    # Market depth indicator
+    try:
+        spread_info = bot.client.get_bid_ask_spread()
+        if spread_info:
+            fig.add_hline(
+                y=spread_info['bid'],
+                line_dash="dash",
+                line_color="blue",
+                opacity=0.3,
+                annotation_text=f"Bid: ${spread_info['bid']:,.2f}"
+            )
+            fig.add_hline(
+                y=spread_info['ask'],
+                line_dash="dash",
+                line_color="red",
+                opacity=0.3,
+                annotation_text=f"Ask: ${spread_info['ask']:,.2f}"
+            )
+    except:
+        pass
+    
+    fig.update_layout(
+        title="BTC Price with Smart Order Positions",
+        xaxis_title="Time (CST)",
+        yaxis_title="Price (USD)",
+        height=400,
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
 def render_trade_history():
-   """Render trade history"""
-   if not st.session_state.bot:
-       return
-   
-   st.subheader("📜 Trade History")
-   
-   trades = st.session_state.bot.get_trade_history()
-   
-   if not trades:
-       st.info("No trades yet")
-       return
-   
-   # Show last 10 trades
-   recent_trades = trades[-10:] if len(trades) > 10 else trades
-   
-   trade_data = []
-   for trade in reversed(recent_trades):
-       side_icon = "🟢" if trade["side"] == "buy" else "🔴"
-       
-       trade_data.append({
-           "Time": datetime.fromtimestamp(trade["timestamp"]).strftime("%H:%M:%S"),
-           "Side": f"{side_icon} {trade['side'].upper()}",
-           "Size": f"{trade['size']:.6f}",
-           "Price": f"${trade['price']:,.2f}",
-           "Total": f"${trade['funds']:.2f}",
-           "Fee": f"${trade['fee']:.2f}"
-       })
-   
-   if trade_data:
-       df = pd.DataFrame(trade_data)
-       st.dataframe(df, use_container_width=True, hide_index=True)
-       
-       # Trade summary
-       if len(trades) > 1:
-           col1, col2, col3 = st.columns(3)
-           
-           buy_trades = [t for t in trades if t["side"] == "buy"]
-           sell_trades = [t for t in trades if t["side"] == "sell"]
-           total_fees = sum(t.get("fee", 0) for t in trades)
-           
-           with col1:
-               st.metric("Total Trades", len(trades))
-           with col2:
-               st.metric("Buy/Sell", f"{len(buy_trades)}/{len(sell_trades)}")
-           with col3:
-               st.metric("Total Fees", f"${total_fees:.2f}")
+    """Render trade history"""
+    if not st.session_state.bot:
+        return
+    
+    st.subheader("📜 Trade History")
+    
+    trades = st.session_state.bot.get_trade_history()
+    
+    if not trades:
+        st.info("No trades yet")
+        return
+    
+    # Show last 10 trades
+    recent_trades = trades[-10:] if len(trades) > 10 else trades
+    
+    trade_data = []
+    cst = pytz.timezone('America/Chicago')
+    
+    for trade in reversed(recent_trades):
+        side_icon = "🟢" if trade["side"] == "buy" else "🔴"
+        
+        # Convert timestamp to CST
+        trade_time = datetime.fromtimestamp(trade["timestamp"], tz=cst)
+        
+        trade_data.append({
+            "Time": trade_time.strftime("%m/%d %H:%M:%S"),
+            "Side": f"{side_icon} {trade['side'].upper()}",
+            "Size": f"{trade['size']:.6f}",
+            "Price": f"${trade['price']:,.2f}",
+            "Total": f"${trade['funds']:.2f}",
+            "Fee": f"${trade['fee']:.2f}"
+        })
+    
+    if trade_data:
+        df = pd.DataFrame(trade_data)
+        st.dataframe(df, use_container_width=True, hide_index=True)
+        
+        # Trade summary
+        if len(trades) > 1:
+            col1, col2, col3 = st.columns(3)
+            
+            buy_trades = [t for t in trades if t["side"] == "buy"]
+            sell_trades = [t for t in trades if t["side"] == "sell"]
+            total_fees = sum(t.get("fee", 0) for t in trades)
+            
+            with col1:
+                st.metric("Total Trades", len(trades))
+            with col2:
+                st.metric("Buy/Sell", f"{len(buy_trades)}/{len(sell_trades)}")
+            with col3:
+                st.metric("Total Fees", f"${total_fees:.2f}")
 
 def render_performance_chart():
-   """Render performance chart for simulation"""
-   if not st.session_state.bot or not st.session_state.bot.simulation:
-       return
-   
-   st.subheader("📈 Portfolio Performance")
-   
-   trades = st.session_state.bot.get_trade_history()
-   if not trades:
-       st.info("No trades to show performance")
-       return
-   
-   # Calculate portfolio value over time
-   performance_data = []
-   balance = st.session_state.bot.client.initial_balance
-   btc_holdings = 0
-   
-   for trade in trades:
-       if trade["side"] == "buy":
-           balance -= trade["funds"]
-           btc_holdings += trade["size"]
-       else:
-           balance += trade["funds"] - trade["fee"]
-           btc_holdings -= trade["size"]
-       
-       portfolio_value = balance + (btc_holdings * trade["price"])
-       
-       performance_data.append({
-           "time": datetime.fromtimestamp(trade["timestamp"]),
-           "portfolio_value": portfolio_value,
-           "trade_side": trade["side"],
-           "price": trade["price"]
-       })
-   
-   if performance_data:
-       df = pd.DataFrame(performance_data)
-       
-       fig = go.Figure()
-       
-       # Portfolio value line
-       fig.add_trace(go.Scatter(
-           x=df["time"],
-           y=df["portfolio_value"],
-           mode='lines+markers',
-           name='Portfolio Value',
-           line=dict(color='blue', width=2),
-           hovertemplate='<b>Portfolio Value</b><br>%{y:$,.2f}<br>%{x}<extra></extra>'
-       ))
-       
-       # Mark trades
-       buys = df[df["trade_side"] == "buy"]
-       sells = df[df["trade_side"] == "sell"]
-       
-       if not buys.empty:
-           fig.add_trace(go.Scatter(
-               x=buys["time"],
-               y=buys["portfolio_value"],
-               mode='markers',
-               name='Smart Buy',
-               marker=dict(color='green', size=8, symbol='triangle-up'),
-               hovertemplate='<b>SMART BUY</b><br>Portfolio: %{y:$,.2f}<extra></extra>'
-           ))
-       
-       if not sells.empty:
-           fig.add_trace(go.Scatter(
-               x=sells["time"],
-               y=sells["portfolio_value"],
-               mode='markers',
-               name='Smart Sell',
-               marker=dict(color='red', size=8, symbol='triangle-down'),
-               hovertemplate='<b>SMART SELL</b><br>Portfolio: %{y:$,.2f}<extra></extra>'
-           ))
-       
-       # Initial balance line
-       initial_balance = st.session_state.bot.client.initial_balance
-       fig.add_hline(
-           y=initial_balance, 
-           line_dash="dash", 
-           line_color="gray", 
-           annotation_text=f"Initial: ${initial_balance}"
-       )
-       
-       fig.update_layout(
-           title="Smart Trading Performance Over Time",
-           xaxis_title="Time",
-           yaxis_title="Portfolio Value (USD)",
-           height=400
-       )
-       
-       st.plotly_chart(fig, use_container_width=True)
-       
-       # Performance metrics
-       current_value = df["portfolio_value"].iloc[-1]
-       total_return = current_value - initial_balance
-       return_pct = (total_return / initial_balance) * 100
-       
-       col1, col2, col3 = st.columns(3)
-       with col1:
-           st.metric("Total Return", f"${total_return:+.2f}", delta=f"{return_pct:+.2f}%")
-       with col2:
-           st.metric("Current Value", f"${current_value:.2f}")
-       with col3:
-           total_trades = len(trades)
-           st.metric("Total Trades", total_trades)
+    """Render performance chart for both simulation and live"""
+    if not st.session_state.bot:
+        return
+    
+    st.subheader("📈 Portfolio Performance")
+    
+    trades = st.session_state.bot.get_trade_history()
+    if not trades:
+        st.info("No trades to show performance")
+        return
+    
+    # Calculate portfolio value over time
+    performance_data = []
+    
+    if st.session_state.bot.simulation:
+        balance = st.session_state.bot.client.initial_balance
+    else:
+        # For live trading, calculate based on trade history
+        initial_balance = 50  # Approximate starting point
+        balance = initial_balance
+    
+    btc_holdings = 0
+    cst = pytz.timezone('America/Chicago')
+    
+    for trade in trades:
+        if trade["side"] == "buy":
+            balance -= trade["funds"]
+            btc_holdings += trade["size"]
+        else:
+            balance += trade["funds"] - trade["fee"]
+            btc_holdings -= trade["size"]
+        
+        portfolio_value = balance + (btc_holdings * trade["price"])
+        
+        performance_data.append({
+            "time": datetime.fromtimestamp(trade["timestamp"], tz=cst),
+            "portfolio_value": portfolio_value,
+            "trade_side": trade["side"],
+            "price": trade["price"]
+        })
+    
+    if performance_data:
+        df = pd.DataFrame(performance_data)
+        
+        fig = go.Figure()
+        
+        # Portfolio value line
+        fig.add_trace(go.Scatter(
+            x=df["time"],
+            y=df["portfolio_value"],
+            mode='lines+markers',
+            name='Portfolio Value',
+            line=dict(color='blue', width=2),
+            hovertemplate='<b>Portfolio Value</b><br>%{y:$,.2f}<br>%{x}<extra></extra>'
+        ))
+        
+        # Mark trades
+        buys = df[df["trade_side"] == "buy"]
+        sells = df[df["trade_side"] == "sell"]
+        
+        if not buys.empty:
+            fig.add_trace(go.Scatter(
+                x=buys["time"],
+                y=buys["portfolio_value"],
+                mode='markers',
+                name='Smart Buy',
+                marker=dict(color='green', size=8, symbol='triangle-up'),
+                hovertemplate='<b>SMART BUY</b><br>Portfolio: %{y:$,.2f}<extra></extra>'
+            ))
+        
+        if not sells.empty:
+            fig.add_trace(go.Scatter(
+                x=sells["time"],
+                y=sells["portfolio_value"],
+                mode='markers',
+                name='Smart Sell',
+                marker=dict(color='red', size=8, symbol='triangle-down'),
+                hovertemplate='<b>SMART SELL</b><br>Portfolio: %{y:$,.2f}<extra></extra>'
+            ))
+        
+        # Initial balance line
+        if st.session_state.bot.simulation:
+            initial_balance = st.session_state.bot.client.initial_balance
+        else:
+            initial_balance = 50  # Estimated for live
+            
+        fig.add_hline(
+            y=initial_balance, 
+            line_dash="dash", 
+            line_color="gray", 
+            annotation_text=f"Initial: ${initial_balance}"
+        )
+        
+        fig.update_layout(
+            title="Smart Trading Performance Over Time",
+            xaxis_title="Time (CST)",
+            yaxis_title="Portfolio Value (USD)",
+            height=400
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Performance metrics
+        current_value = df["portfolio_value"].iloc[-1]
+        total_return = current_value - initial_balance
+        return_pct = (total_return / initial_balance) * 100
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Return", f"${total_return:+.2f}", delta=f"{return_pct:+.2f}%")
+        with col2:
+            st.metric("Current Value", f"${current_value:.2f}")
+        with col3:
+            total_trades = len(trades)
+            st.metric("Total Trades", total_trades)
+
+# Update the main tabs section:
+        with tab2:
+            # Performance now works for both simulation and live
+            render_performance_chart()
 
 def render_market_info():
    """Render market information and spread data"""

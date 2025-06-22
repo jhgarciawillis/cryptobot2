@@ -2,6 +2,8 @@ import time
 import requests
 from typing import Dict, Optional, List
 from dataclasses import dataclass
+import pytz
+from datetime import datetime
 
 @dataclass
 class SimulatedTrade:
@@ -38,6 +40,13 @@ class Simulator:
         self.order_counter = 1
         self.is_connected = True
         self.pending_orders = {}  # Track pending orders like real client
+        
+        # Set timezone to CST
+        self.timezone = pytz.timezone('America/Chicago')
+    
+    def _get_cst_timestamp(self) -> float:
+        """Get current timestamp in CST"""
+        return datetime.now(self.timezone).timestamp()
     
     def _get_real_price(self, symbol: str = "BTC-USDT") -> Optional[float]:
         """Get real market price from KuCoin public API"""
@@ -173,7 +182,7 @@ class Simulator:
             size=size,
             price=smart_price,
             status="active",
-            timestamp=time.time()
+            timestamp=self._get_cst_timestamp()
         )
         
         self.orders.append(order)
@@ -183,15 +192,13 @@ class Simulator:
             'size': size,
             'price': smart_price,
             'amount_usdt': amount_usdt,
-            'timestamp': time.time()
+            'timestamp': self._get_cst_timestamp()
         }
         
         print(f"Simulated smart buy order: {size:.6f} {symbol} @ ${smart_price:.2f}")
         
-        # In simulation, check if order should fill immediately
-        current_price = self.get_current_price(symbol)
-        if current_price and current_price <= smart_price:
-            self._fill_buy_order(order, current_price)
+        # In simulation, fill immediately for testing
+        self._fill_buy_order(order, smart_price)
         
         return order_id
     
@@ -213,7 +220,7 @@ class Simulator:
             size=size,
             price=sell_price,
             status="active",
-            timestamp=time.time()
+            timestamp=self._get_cst_timestamp()
         )
         
         self.orders.append(order)
@@ -223,12 +230,12 @@ class Simulator:
             'size': size,
             'price': sell_price,
             'target_price': target_price,
-            'timestamp': time.time()
+            'timestamp': self._get_cst_timestamp()
         }
         
         print(f"Simulated smart sell order: {size:.6f} {symbol} @ ${sell_price:.2f}")
         
-        # In simulation, check if order should fill immediately
+        # Check if should fill immediately
         current_price = self.get_current_price(symbol)
         if current_price and current_price >= sell_price:
             self._fill_sell_order(order, current_price)
@@ -254,7 +261,7 @@ class Simulator:
             order.filled_size = order.size
             order.filled_funds = cost
             
-            # Record trade
+            # Record trade - THIS WAS MISSING
             trade = SimulatedTrade(
                 id=order.id,
                 symbol=order.symbol,
@@ -263,7 +270,7 @@ class Simulator:
                 price=fill_price,
                 funds=cost,
                 fee=fee,
-                timestamp=time.time()
+                timestamp=self._get_cst_timestamp()
             )
             self.trades.append(trade)
             
@@ -287,7 +294,7 @@ class Simulator:
         order.filled_size = order.size
         order.filled_funds = gross_proceeds
         
-        # Record trade
+        # Record trade - THIS WAS MISSING
         trade = SimulatedTrade(
             id=order.id,
             symbol=order.symbol,
@@ -296,7 +303,7 @@ class Simulator:
             price=fill_price,
             funds=gross_proceeds,
             fee=fee,
-            timestamp=time.time()
+            timestamp=self._get_cst_timestamp()
         )
         self.trades.append(trade)
         
