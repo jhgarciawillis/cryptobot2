@@ -37,7 +37,7 @@ class Position:
 
 class TradingBot:
     def __init__(self, api_key: str = None, api_secret: str = None, api_passphrase: str = None, 
-                 sandbox: bool = True, simulation: bool = True, initial_balance: float = 50):
+                 simulation: bool = True, initial_balance: float = 50):
         
         # Configuration with enforced minimums
         self.simulation = simulation
@@ -54,7 +54,8 @@ class TradingBot:
         else:
             if not all([api_key, api_secret, api_passphrase]):
                 raise ValueError("API credentials required for live trading")
-            self.client = KuCoinClient(api_key, api_secret, api_passphrase, sandbox)
+            # REMOVED sandbox parameter - always use live API
+            self.client = KuCoinClient(api_key, api_secret, api_passphrase)
         
         # Bot state
         self.status = "stopped"

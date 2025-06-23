@@ -83,13 +83,12 @@ def init_bot(simulation: bool = True):
             initial_balance = float(st.secrets.get("api_credentials", {}).get("initial_balance", 50))
             return TradingBot(simulation=True, initial_balance=initial_balance)
         else:
-            # Live trading
+            # Live trading - REMOVED sandbox=True
             creds = st.secrets["api_credentials"]
             return TradingBot(
                 api_key=creds["api_key"],
                 api_secret=creds["api_secret"],
                 api_passphrase=creds["api_passphrase"],
-                sandbox=True,  # Use sandbox for safety
                 simulation=False
             )
     except Exception as e:

@@ -6,11 +6,11 @@ import requests
 from typing import Dict, Optional, Any, List
 
 class KuCoinClient:
-    def __init__(self, api_key: str, api_secret: str, api_passphrase: str, sandbox: bool = True):
+    def __init__(self, api_key: str, api_secret: str, api_passphrase: str):
         self.api_key = api_key
         self.api_secret = api_secret
         self.api_passphrase = api_passphrase
-        self.base_url = "https://openapi-sandbox.kucoin.com" if sandbox else "https://api.kucoin.com"
+        self.base_url = "https://api.kucoin.com"  # Always use live API
         self.is_connected = False
         self.pending_orders = {}  # Track our pending orders
         self._test_connection()
@@ -81,16 +81,24 @@ class KuCoinClient:
     
     def _test_connection(self):
         """Test API connection"""
+        print(f"🔍 Testing connection to: {self.base_url}")
         try:
+            # Test public endpoint first (no auth needed)
+            public_url = "https://api.kucoin.com/api/v1/market/orderbook/level1?symbol=BTC-USDT"
+            response = requests.get(public_url, timeout=10)
+            print(f"🔍 Public API test: {response.status_code}")
+            
+            # Test authenticated endpoint
             result = self._make_request("GET", "/api/v1/accounts")
             self.is_connected = result is not None
             if self.is_connected:
                 print("✅ KuCoin API connected")
             else:
                 print("❌ KuCoin API connection failed")
-        except:
+                print(f"🔍 API endpoint: {self.base_url}")
+        except Exception as e:
             self.is_connected = False
-            print("❌ KuCoin API connection failed")
+            print(f"❌ KuCoin API connection failed: {e}")
     
     def get_current_price(self, symbol: str = "BTC-USDT") -> Optional[float]:
         """Get current market price"""
