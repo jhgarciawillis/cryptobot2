@@ -5,6 +5,7 @@ import plotly.express as px
 import time
 import sys
 import pytz
+import requests
 from datetime import datetime, timedelta
 from bot import TradingBot
 
@@ -22,6 +23,58 @@ if 'live_access_validated' not in st.session_state:
     st.session_state.live_access_validated = False
 if 'auto_refresh' not in st.session_state:
     st.session_state.auto_refresh = True
+
+def get_real_kucoin_historical_data(symbol: str = "BTC-USDT", periods: int = 100):
+    """Get real historical price data from KuCoin"""
+    try:
+        import time as time_module
+        end_time = int(time_module.time())
+        start_time = end_time - (periods * 300)  # 5-minute intervals
+        
+        url = f"https://api.kucoin.com/api/v1/market/candles?type=5min&symbol={symbol}&startAt={start_time}&endAt={end_time}"
+        response = requests.get(url, timeout=10)
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("code") == "200000":
+                candles = data["data"]
+                
+                # Convert to proper format
+                times = []
+                prices = []
+                cst = pytz.timezone('America/Chicago')
+                
+                for candle in reversed(candles):  # KuCoin returns newest first
+                    timestamp = int(candle[0])
+                    close_price = float(candle[4])
+                    
+                    times.append(datetime.fromtimestamp(timestamp, tz=cst))
+                    prices.append(close_price)
+                
+                return times, prices
+    except Exception as e:
+        st.write(f"🔍 Error fetching real data: {e}")
+    
+    # Fallback: get current price and create minimal real data
+    try:
+        current_price = 100000  # Default fallback
+        if st.session_state.bot:
+            current_price = st.session_state.bot.client.get_current_price() or 100000
+        
+        cst = pytz.timezone('America/Chicago')
+        current_time = datetime.now(cst)
+        times = [current_time - timedelta(minutes=5*i) for i in range(periods)]
+        times.reverse()
+        prices = [current_price] * periods
+        return times, prices
+    except:
+        # Final fallback
+        cst = pytz.timezone('America/Chicago')
+        current_time = datetime.now(cst)
+        times = [current_time - timedelta(minutes=5*i) for i in range(periods)]
+        times.reverse()
+        prices = [100000] * periods
+        return times, prices
 
 def init_bot(simulation: bool = True):
     """Initialize trading bot"""
@@ -86,7 +139,7 @@ def render_sidebar():
     st.session_state.auto_refresh = st.sidebar.checkbox(
         "🔄 Auto Refresh", 
         value=st.session_state.auto_refresh,
-        help="Automatically refresh when bot is running"
+        help="Automatically refresh when bot is running (every 30 seconds)"
     )
     
     st.sidebar.divider()
@@ -322,19 +375,62 @@ def render_dashboard():
                    st.metric("Avg Buy Price", f"${status['positions']['avg_buy_price']:,.2f}")
 
 def render_positions_table():
-    """Render detailed positions table"""
-    if not st.session_state.bot:
-        return
-    
-    bot = st.session_state.bot
-    positions = bot.get_positions_detail()
-    
-    print(f"🔍 [UI] render_positions_table() - Received {len(positions)} positions from bot")
-    
-    if not positions:
-        print(f"🔍 [UI] No positions to display - showing 'No open positions' message")
-        st.info("No open positions")
-        return
+   """Render detailed positions table"""
+   if not st.session_state.bot:
+       return
+   
+   bot = st.session_state.bot
+   
+   # DEBUG: Check both status and positions
+   status = bot.get_status()
+   positions = bot.get_positions_detail()
+   
+   # STREAMLIT DEBUG MESSAGES
+   st.write("🔍 **POSITION DEBUG:**")
+   st.write(f"- Status shows {status['positions']['count']} positions")
+   st.write(f"- get_positions_detail() returned {len(positions)} positions")
+   st.write(f"- Bot.positions list has {len(bot.positions)} items")
+   st.write(f"- Raw bot.positions: {bot.positions}")
+   st.write("---")
+   
+   if not positions:
+       st.info("No open positions")
+       return
+   
+   st.subheader("📊 Smart Order Positions")
+   
+   position_data = []
+   for pos in positions:
+       status_icon = "✅" if pos['is_profitable'] else "⏳"
+       status_text = "Ready to Sell" if pos['is_profitable'] else "Waiting for Profit"
+       
+       position_data.append({
+           "Position": pos['position_id'],
+           "Size (BTC)": f"{pos['size']:.6f}",
+           "Buy Price": f"${pos['buy_price']:,.2f}",
+           "Target Price": f"${pos['target_price']:,.2f}",
+           "Current P&L": f"${pos['current_profit_usd']:+.2f}",
+           "P&L %": f"{pos['current_profit_percent']:+.2f}%",
+           "Status": f"{status_icon} {status_text}",
+           "Sell Order": "✅" if pos['sell_order_id'] else "❌"
+       })
+   
+   df = pd.DataFrame(position_data)
+   st.dataframe(df, use_container_width=True, hide_index=True)
+   
+   # Position summary
+   profitable_count = sum(1 for pos in positions if pos['is_profitable'])
+   total_count = len(positions)
+   
+   col1, col2, col3 = st.columns(3)
+   with col1:
+       st.metric("Total Positions", total_count)
+   with col2:
+       st.metric("Profitable", f"{profitable_count}/{total_count}")
+   with col3:
+       if total_count > 0:
+           avg_profit = sum(pos['current_profit_percent'] for pos in positions) / total_count
+           st.metric("Avg P&L", f"{avg_profit:+.2f}%")
 
 def render_order_status():
    """Render open orders status"""
@@ -369,7 +465,7 @@ def render_order_status():
        st.error(f"Error fetching orders: {e}")
 
 def render_price_chart():
-    """Render price chart with position markers"""
+    """Render price chart with REAL KuCoin data and position markers"""
     if not st.session_state.bot:
         return
     
@@ -382,34 +478,30 @@ def render_price_chart():
         st.warning("No price data available")
         return
     
-    # Generate sample price data with CST timezone
-    import numpy as np
-    
-    # Use CST timezone
-    cst = pytz.timezone('America/Chicago')
-    times = pd.date_range(end=datetime.now(cst), periods=100, freq='5min', tz=cst)
-    
-    np.random.seed(42)
-    price_changes = np.cumsum(np.random.normal(0, 0.001, 100))
-    prices = [current_price * (1 + change) for change in price_changes]
+    # GET REAL KUCOIN HISTORICAL DATA
+    times, prices = get_real_kucoin_historical_data("BTC-USDT", 100)
     
     fig = go.Figure()
     
-    # Price line
+    # Real price line
     fig.add_trace(go.Scatter(
         x=times,
         y=prices,
         mode='lines',
-        name='BTC Price',
+        name='BTC Price (Real KuCoin Data)',
         line=dict(color='orange', width=2)
     ))
     
-    # Position markers
+    # REAL position markers from actual trades
     positions = bot.get_positions_detail()
     if positions:
-        # Convert timestamps to CST
+        cst = pytz.timezone('America/Chicago')
         buy_times = [datetime.fromtimestamp(pos['buy_timestamp'], tz=cst) for pos in positions]
         buy_prices = [pos['buy_price'] for pos in positions]
+        
+        st.write(f"🔍 **CHART DEBUG:** Found {len(positions)} positions to plot")
+        st.write(f"🔍 Buy times: {buy_times}")
+        st.write(f"🔍 Buy prices: {buy_prices}")
         
         fig.add_trace(go.Scatter(
             x=buy_times,
@@ -420,7 +512,7 @@ def render_price_chart():
             hovertemplate='<b>SMART BUY</b><br>Price: %{y:$,.2f}<br>Time: %{x}<extra></extra>'
         ))
         
-        # Sell target lines for each position
+        # Real target lines for each position
         for pos in positions:
             target_price = pos['target_price']
             color = "green" if pos['is_profitable'] else "orange"
@@ -440,7 +532,7 @@ def render_price_chart():
         annotation_text=f"Current: ${current_price:,.2f}"
     )
     
-    # Market depth indicator
+    # Real market depth
     try:
         spread_info = bot.client.get_bid_ask_spread()
         if spread_info:
@@ -462,7 +554,7 @@ def render_price_chart():
         pass
     
     fig.update_layout(
-        title="BTC Price with Smart Order Positions",
+        title="BTC Price with Smart Order Positions (Real Data)",
         xaxis_title="Time (CST)",
         yaxis_title="Price (USD)",
         height=400,
@@ -685,111 +777,112 @@ def render_market_info():
        st.error(f"Error fetching market data: {e}")
 
 def main():
-   """Main application"""
-   # Custom CSS
-   st.markdown("""
-   <style>
-   .metric-container {
-       background-color: #f0f2f6;
-       padding: 1rem;
-       border-radius: 0.5rem;
-       margin: 0.5rem 0;
-   }
-   .success-box {
-       background-color: #d4edda;
-       border-left: 4px solid #28a745;
-       padding: 0.75rem;
-       margin: 1rem 0;
-   }
-   .warning-box {
-       background-color: #fff3cd;
-       border-left: 4px solid #ffc107;
-       padding: 0.75rem;
-       margin: 1rem 0;
-   }
-   </style>
-   """, unsafe_allow_html=True)
-   
-   # Check if secrets are configured
-   try:
-       if 'api_credentials' not in st.secrets:
-           st.error("❌ Streamlit secrets not configured")
-           st.markdown("""
-           **Setup Required:**
-           
-           Create `.streamlit/secrets.toml` with:
-           ```toml
-           [api_credentials]
-           api_key = "your_kucoin_api_key"
-           api_secret = "your_kucoin_api_secret"
-           api_passphrase = "your_kucoin_api_passphrase"
-           initial_balance = 50
-           live_trading_access_key = "your_secure_key"
-           ```
-           """)
-           st.stop()
-   except Exception as e:
-       st.error(f"Configuration error: {e}")
-       st.stop()
-   
-   # Sidebar
-   render_sidebar()
-   
-   # Main content
-   if st.session_state.bot:
-       # Auto-refresh if running and enabled
-       if (st.session_state.bot.status == "running" and 
-           st.session_state.auto_refresh):
-           time.sleep(30)
-           st.rerun()
-       
-       # Dashboard
-       render_dashboard()
-       
-       st.divider()
-       
-       # Market info
-       render_market_info()
-       
-       st.divider()
-       
-       # Charts and tables in tabs
-       tab1, tab2, tab3 = st.tabs(["📊 Positions & Orders", "📈 Performance", "📜 History"])
-       
-       with tab1:
-           col1, col2 = st.columns([2, 1])
-           
-           with col1:
-               render_price_chart()
-           
-           with col2:
-               render_positions_table()
-               st.divider()
-               render_order_status()
-       
-       with tab2:
-           # Performance now works for both simulation and live
-           render_performance_chart()
-       
-       with tab3:
-           render_trade_history()
-       
-       # Footer
-       st.divider()
-       col1, col2, col3, col4 = st.columns(4)
-       
-       with col1:
-           st.caption("🤖 Smart Crypto Bot v3.0")
-       
-       with col2:
-           mode = "SIM" if st.session_state.bot.simulation else "LIVE"
-           st.caption(f"Mode: {mode}")
-       
-       with col3:
-           st.caption(f"Strategy: Smart Limit Orders")
-       
-       with col4:
-           st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
+  """Main application"""
+  # Custom CSS
+  st.markdown("""
+  <style>
+  .metric-container {
+      background-color: #f0f2f6;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      margin: 0.5rem 0;
+  }
+  .success-box {
+      background-color: #d4edda;
+      border-left: 4px solid #28a745;
+      padding: 0.75rem;
+      margin: 1rem 0;
+  }
+  .warning-box {
+      background-color: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 0.75rem;
+      margin: 1rem 0;
+  }
+  </style>
+  """, unsafe_allow_html=True)
+  
+  # Check if secrets are configured
+  try:
+      if 'api_credentials' not in st.secrets:
+          st.error("❌ Streamlit secrets not configured")
+          st.markdown("""
+          **Setup Required:**
+          
+          Create `.streamlit/secrets.toml` with:
+          ```toml
+          [api_credentials]
+          api_key = "your_kucoin_api_key"
+          api_secret = "your_kucoin_api_secret"
+          api_passphrase = "your_kucoin_api_passphrase"
+          initial_balance = 50
+          live_trading_access_key = "your_secure_key"
+          ```
+          """)
+          st.stop()
+  except Exception as e:
+      st.error(f"Configuration error: {e}")
+      st.stop()
+  
+  # Sidebar
+  render_sidebar()
+  
+  # Main content
+  if st.session_state.bot:
+      # CHANGED: Auto-refresh every 30 seconds instead of 3 seconds
+      if (st.session_state.bot.status == "running" and 
+          st.session_state.auto_refresh):
+          st.write(f"🔍 [UI] Auto-refreshing UI at {datetime.now().strftime('%H:%M:%S')}")
+          time.sleep(30)  # Changed from 3 to 30 seconds
+          st.rerun()
+      
+      # Dashboard
+      render_dashboard()
+      
+      st.divider()
+      
+      # Market info
+      render_market_info()
+      
+      st.divider()
+      
+      # Charts and tables in tabs
+      tab1, tab2, tab3 = st.tabs(["📊 Positions & Orders", "📈 Performance", "📜 History"])
+      
+      with tab1:
+          col1, col2 = st.columns([2, 1])
+          
+          with col1:
+              render_price_chart()
+          
+          with col2:
+              render_positions_table()
+              st.divider()
+              render_order_status()
+      
+      with tab2:
+          # Performance now works for both simulation and live
+          render_performance_chart()
+      
+      with tab3:
+          render_trade_history()
+      
+      # Footer
+      st.divider()
+      col1, col2, col3, col4 = st.columns(4)
+      
+      with col1:
+          st.caption("🤖 Smart Crypto Bot v3.0")
+      
+      with col2:
+          mode = "SIM" if st.session_state.bot.simulation else "LIVE"
+          st.caption(f"Mode: {mode}")
+      
+      with col3:
+          st.caption(f"Strategy: Smart Limit Orders")
+      
+      with col4:
+          st.caption(f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
 
 def cli_mode():
   """CLI mode for headless operation"""

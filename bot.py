@@ -151,7 +151,12 @@ class TradingBot:
         """Process orders that have been filled"""
         filled_orders = self.client.check_filled_orders()
         
-        print(f"🔍 [BOT] Checking filled orders... Found {len(filled_orders)} filled orders")
+        # DEBUG: Show in UI
+        try:
+            import streamlit as st
+            st.write(f"🔍 **FILLED ORDERS DEBUG:** Found {len(filled_orders)} filled orders")
+        except:
+            pass
         
         for order_info in filled_orders:
             if order_info['type'] == 'buy' and order_info['status'] != 'cancelled':
@@ -164,12 +169,48 @@ class TradingBot:
                 )
                 self.positions.append(position)
                 
-                print(f"🔍 [BOT] ✅ Position created: Buy {position.size:.6f} BTC @ ${position.buy_price:.2f}")
-                print(f"🔍 [BOT] Total positions now: {len(self.positions)}")
+                # DEBUG: Show in UI
+                try:
+                    import streamlit as st
+                    st.write(f"🔍 **BUY FILLED:** Created position - Buy {position.size:.6f} BTC @ ${position.buy_price:.2f}")
+                    st.write(f"🔍 **POSITIONS COUNT:** Now have {len(self.positions)} total positions")
+                except:
+                    pass
+                
+                print(f"✅ Buy filled: {position.size:.6f} BTC @ ${position.buy_price:.2f}")
+                print(f"✅ Position created: {len(self.positions)} total positions")
                 
                 # Immediately place sell order for this position
                 self._execute_smart_sell(position, order_info['actual_price'])
-
+                
+            elif order_info['type'] == 'sell' and order_info['status'] != 'cancelled':
+                # Sell order filled - remove position
+                sell_order_id = order_info['order_id']
+                position_to_remove = None
+                
+                for position in self.positions:
+                    if position.sell_order_id == sell_order_id:
+                        position_to_remove = position
+                        break
+                
+                if position_to_remove:
+                    profit_pct = position_to_remove.get_profit_at_price(order_info['actual_price'])
+                    profit_usd = (order_info['actual_price'] - position_to_remove.buy_price) * position_to_remove.size
+                    
+                    # DEBUG: Show in UI
+                    try:
+                        import streamlit as st
+                        st.write(f"🔍 **SELL FILLED:** Sold {position_to_remove.size:.6f} BTC @ ${order_info['actual_price']:.2f}")
+                        st.write(f"🔍 **PROFIT:** ${profit_usd:.2f} ({profit_pct:+.2f}%)")
+                    except:
+                        pass
+                    
+                    print(f"✅ Sell filled: {position_to_remove.size:.6f} BTC @ ${order_info['actual_price']:.2f}")
+                    print(f"   Profit: ${profit_usd:.2f} ({profit_pct:+.2f}%)")
+                    
+                    self.positions.remove(position_to_remove)
+                    print(f"✅ Position removed: {len(self.positions)} remaining positions")
+    
     def _check_exit_opportunities(self, current_price: float):
         """Check for exit opportunities when stopping"""
         if not self.pending_exit:
@@ -381,11 +422,34 @@ class TradingBot:
     
     def get_positions_detail(self) -> List[Dict]:
         """Get detailed position information"""
-        print(f"🔍 [BOT] get_positions_detail() called - Bot has {len(self.positions)} positions")
+        # DEBUG: Show in UI
+        try:
+            import streamlit as st
+            st.write("🔍 **get_positions_detail() DEBUG:**")
+            st.write(f"- Bot has {len(self.positions)} positions in memory")
+            st.write(f"- Raw positions list: {self.positions}")
+        except:
+            pass
+        
         current_price = self.last_price or self.client.get_current_price(self.symbol)
+        
+        # DEBUG: Show current price
+        try:
+            import streamlit as st
+            st.write(f"- Current price: ${current_price}")
+        except:
+            pass
+        
         position_details = []
         
         for i, pos in enumerate(self.positions, 1):
+            # DEBUG: Show processing each position
+            try:
+                import streamlit as st
+                st.write(f"- Processing position {i}: buy_price=${pos.buy_price}, size={pos.size}, timestamp={pos.timestamp}")
+            except:
+                pass
+            
             target_price = pos.calculate_required_sell_price(self.profit_margin)
             profit_pct = pos.get_profit_at_price(current_price) if current_price else 0
             profit_usd = (current_price - pos.buy_price) * pos.size if current_price else 0
@@ -404,14 +468,31 @@ class TradingBot:
                 "sell_order_id": pos.sell_order_id
             })
         
-        print(f"DEBUG: Returning {len(position_details)} position details")  # Debug print
+        # DEBUG: Show final result
+        try:
+            import streamlit as st
+            st.write(f"- Returning {len(position_details)} position details")
+            if position_details:
+                st.write(f"- Position details: {position_details}")
+        except:
+            pass
+        
         return position_details
     
     def get_trade_history(self) -> List[Dict]:
         """Get trade history"""
         if hasattr(self.client, 'get_trade_history'):
             trades = self.client.get_trade_history()
-            print(f"🔍 [BOT] get_trade_history() called - Retrieved {len(trades)} trades")
+            
+            # DEBUG: Show in UI
+            try:
+                import streamlit as st
+                st.write(f"🔍 **TRADE HISTORY DEBUG:** Retrieved {len(trades)} trades from client")
+                if trades:
+                    st.write(f"- Sample trade: {trades[0] if trades else 'None'}")
+            except:
+                pass
+            
             return trades
         return []
     
