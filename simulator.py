@@ -261,7 +261,7 @@ class Simulator:
             order.filled_size = order.size
             order.filled_funds = cost
             
-            # Record trade - ENSURE THIS EXECUTES
+            # Record trade
             trade = SimulatedTrade(
                 id=order.id,
                 symbol=order.symbol,
@@ -273,10 +273,12 @@ class Simulator:
                 timestamp=self._get_cst_timestamp()
             )
             self.trades.append(trade)
-            print(f"✅ Trade recorded: Buy {order.size:.6f} @ ${fill_price:.2f}")
             
-            print(f"Buy order filled: {order.size:.6f} @ ${fill_price:.2f}")
-    
+            # CONSOLE DEBUG MESSAGES
+            print(f"🔍 [SIMULATOR] Buy order filled: {order.size:.6f} BTC @ ${fill_price:.2f}")
+            print(f"🔍 [SIMULATOR] Trade recorded. Total trades: {len(self.trades)}")
+            print(f"🔍 [SIMULATOR] New balances - USDT: ${self.balances['USDT']:.2f}, BTC: {self.balances['BTC']:.6f}")
+            
     def _fill_sell_order(self, order: SimulatedOrder, fill_price: float):
         """Fill a sell order"""
         if order.status != "active" or self.balances["BTC"] < order.size:

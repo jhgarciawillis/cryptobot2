@@ -322,51 +322,19 @@ def render_dashboard():
                    st.metric("Avg Buy Price", f"${status['positions']['avg_buy_price']:,.2f}")
 
 def render_positions_table():
-   """Render detailed positions table"""
-   if not st.session_state.bot:
-       return
-   
-   bot = st.session_state.bot
-   positions = bot.get_positions_detail()
-   
-   if not positions:
-       st.info("No open positions")
-       return
-   
-   st.subheader("📊 Smart Order Positions")
-   
-   position_data = []
-   for pos in positions:
-       status_icon = "✅" if pos['is_profitable'] else "⏳"
-       status_text = "Ready to Sell" if pos['is_profitable'] else "Waiting for Profit"
-       
-       position_data.append({
-           "Position": pos['position_id'],
-           "Size (BTC)": f"{pos['size']:.6f}",
-           "Buy Price": f"${pos['buy_price']:,.2f}",
-           "Target Price": f"${pos['target_price']:,.2f}",
-           "Current P&L": f"${pos['current_profit_usd']:+.2f}",
-           "P&L %": f"{pos['current_profit_percent']:+.2f}%",
-           "Status": f"{status_icon} {status_text}",
-           "Sell Order": "✅" if pos['sell_order_id'] else "❌"
-       })
-   
-   df = pd.DataFrame(position_data)
-   st.dataframe(df, use_container_width=True, hide_index=True)
-   
-   # Position summary
-   profitable_count = sum(1 for pos in positions if pos['is_profitable'])
-   total_count = len(positions)
-   
-   col1, col2, col3 = st.columns(3)
-   with col1:
-       st.metric("Total Positions", total_count)
-   with col2:
-       st.metric("Profitable", f"{profitable_count}/{total_count}")
-   with col3:
-       if total_count > 0:
-           avg_profit = sum(pos['current_profit_percent'] for pos in positions) / total_count
-           st.metric("Avg P&L", f"{avg_profit:+.2f}%")
+    """Render detailed positions table"""
+    if not st.session_state.bot:
+        return
+    
+    bot = st.session_state.bot
+    positions = bot.get_positions_detail()
+    
+    print(f"🔍 [UI] render_positions_table() - Received {len(positions)} positions from bot")
+    
+    if not positions:
+        print(f"🔍 [UI] No positions to display - showing 'No open positions' message")
+        st.info("No open positions")
+        return
 
 def render_order_status():
    """Render open orders status"""
@@ -772,7 +740,7 @@ def main():
        # Auto-refresh if running and enabled
        if (st.session_state.bot.status == "running" and 
            st.session_state.auto_refresh):
-           time.sleep(3)
+           time.sleep(30)
            st.rerun()
        
        # Dashboard

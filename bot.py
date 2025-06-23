@@ -151,6 +151,8 @@ class TradingBot:
         """Process orders that have been filled"""
         filled_orders = self.client.check_filled_orders()
         
+        print(f"🔍 [BOT] Checking filled orders... Found {len(filled_orders)} filled orders")
+        
         for order_info in filled_orders:
             if order_info['type'] == 'buy' and order_info['status'] != 'cancelled':
                 # Buy order filled - create new position
@@ -162,32 +164,12 @@ class TradingBot:
                 )
                 self.positions.append(position)
                 
-                print(f"✅ Buy filled: {position.size:.6f} BTC @ ${position.buy_price:.2f}")
-                print(f"✅ Position created: {len(self.positions)} total positions")
+                print(f"🔍 [BOT] ✅ Position created: Buy {position.size:.6f} BTC @ ${position.buy_price:.2f}")
+                print(f"🔍 [BOT] Total positions now: {len(self.positions)}")
                 
                 # Immediately place sell order for this position
                 self._execute_smart_sell(position, order_info['actual_price'])
-                
-            elif order_info['type'] == 'sell' and order_info['status'] != 'cancelled':
-                # Sell order filled - remove position
-                sell_order_id = order_info['order_id']
-                position_to_remove = None
-                
-                for position in self.positions:
-                    if position.sell_order_id == sell_order_id:
-                        position_to_remove = position
-                        break
-                
-                if position_to_remove:
-                    profit_pct = position_to_remove.get_profit_at_price(order_info['actual_price'])
-                    profit_usd = (order_info['actual_price'] - position_to_remove.buy_price) * position_to_remove.size
-                    
-                    print(f"✅ Sell filled: {position_to_remove.size:.6f} BTC @ ${order_info['actual_price']:.2f}")
-                    print(f"   Profit: ${profit_usd:.2f} ({profit_pct:+.2f}%)")
-                    
-                    self.positions.remove(position_to_remove)
-                    print(f"✅ Position removed: {len(self.positions)} remaining positions")
-    
+
     def _check_exit_opportunities(self, current_price: float):
         """Check for exit opportunities when stopping"""
         if not self.pending_exit:
@@ -399,7 +381,7 @@ class TradingBot:
     
     def get_positions_detail(self) -> List[Dict]:
         """Get detailed position information"""
-        print(f"DEBUG: Bot has {len(self.positions)} positions")  # Debug print
+        print(f"🔍 [BOT] get_positions_detail() called - Bot has {len(self.positions)} positions")
         current_price = self.last_price or self.client.get_current_price(self.symbol)
         position_details = []
         
@@ -429,7 +411,7 @@ class TradingBot:
         """Get trade history"""
         if hasattr(self.client, 'get_trade_history'):
             trades = self.client.get_trade_history()
-            print(f"DEBUG: Retrieved {len(trades)} trades from client")  # Debug print
+            print(f"🔍 [BOT] get_trade_history() called - Retrieved {len(trades)} trades")
             return trades
         return []
     
